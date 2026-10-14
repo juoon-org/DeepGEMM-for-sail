@@ -5,6 +5,7 @@
 #include "apis/activation.hpp"
 #include "apis/einsum.hpp"
 #include "apis/hyperconnection.hpp"
+#include "apis/mega_mhc.hpp"
 #include "apis/gemm.hpp"
 #include "apis/layout.hpp"
 #include "apis/runtime.hpp"
@@ -21,6 +22,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     deep_gemm::activation::register_apis(m);
     deep_gemm::einsum::register_apis(m);
     deep_gemm::hyperconnection::register_apis(m);
+    deep_gemm::mega_mhc::register_apis(m);
     deep_gemm::gemm::register_apis(m);
     deep_gemm::layout::register_apis(m);
     deep_gemm::runtime::register_apis(m);
