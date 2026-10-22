@@ -65,7 +65,7 @@ public:
 
     struct LaunchInfo {
         int block_m, block_n, block_k, warp_m, warp_n, num_groups, num_stages;
-        std::string gemm_type, kernel_type, kernel_name;
+        std::string gemm_type, kernel_strategy, kernel_name;
         bool enable_sbo_overlap;
     };
 
@@ -191,7 +191,7 @@ constexpr int WARP_N = {7};
 constexpr int STAGES = {8};
 
 static constexpr GemmType kGemmType = GemmType::{9};
-static constexpr KernelType kKernelType = KernelType::{10}; //Default;
+static constexpr KernelStrategy kKernelStrategy = KernelStrategy::{10}; //Default;
 static constexpr bool kEnableSboOverlap = {11};// false;
 
 using ElementA    = cutlass::bfloat16_t;
@@ -223,23 +223,23 @@ using TiledMma = TiledMMA<
     Layout<Shape<Int<WarpOnM>, Int<WarpOnN>, _1>>,  // 1x4x1 thread group
     Tile<Int<WarpOnM * 16>, Int<WarpOnN * 16>, _16>>;       // 1x1x1 value group
 
-static constexpr int N_EXPAND = kKernelType == KernelType::MultistageOnN && (SHAPE_N % (BLOCK_N) == 0) ? KernelAiuMultistageOnN::N_EXPAND : 1;
+static constexpr int N_EXPAND = kKernelStrategy == KernelStrategy::MultistageOnN && (SHAPE_N % (BLOCK_N) == 0) ? KernelAiuMultistageOnN::N_EXPAND : 1;
 
 using KernelSchedule = cute::conditional_t<
-    kKernelType == KernelType::OverlapMainloop,
+    kKernelStrategy == KernelStrategy::OverlapMainloop,
     KernelAiuMultistageOverlapMainloop,
     cute::conditional_t<
-      kKernelType == KernelType::OverlapPrologue,
+      kKernelStrategy == KernelStrategy::OverlapPrologue,
       KernelAiuMultistageOverlapPrologue,
       cute::conditional_t<
-        kKernelType == KernelType::MultistageOnN,
+        kKernelStrategy == KernelStrategy::MultistageOnN,
         KernelAiuMultistageOnN,
         cutlass::gemm::KernelAiuMultistage>>>;
 using DispatchPolicy = cute::conditional_t<
-    kKernelType == KernelType::OverlapMainloop,
+    kKernelStrategy == KernelStrategy::OverlapMainloop,
     cutlass::gemm::MainloopPPUOverlapMainloop<STAGES, KernelSchedule>,
     cute::conditional_t<
-      kKernelType == KernelType::OverlapPrologue,
+      kKernelStrategy == KernelStrategy::OverlapPrologue,
       cutlass::gemm::MainloopPPUOverlapPrologue<STAGES, KernelSchedule>,
       cutlass::gemm::MainloopPPUAiuOpt<STAGES, KernelSchedule>>>;
 
@@ -247,8 +247,8 @@ static constexpr bool TransA = cutlass::platform::is_same<LayoutA, cutlass::layo
 static constexpr bool TransB = cutlass::platform::is_same<LayoutB, cutlass::layout::ColumnMajor>::value ? false : true;
 static constexpr int TSM_LD_NUM = BLOCK_M == 8 ? 2 : 4;
 
-static constexpr int SmemLayoutStageStrideA = kKernelType == KernelType::OverlapMainloop || kKernelType == KernelType::OverlapPrologue ? (BLOCK_M + BLOCK_N) * BLOCK_K : BLOCK_M * BLOCK_K;
-static constexpr int SmemLayoutStageStrideB = kKernelType == KernelType::OverlapMainloop || kKernelType == KernelType::OverlapPrologue ? (BLOCK_M + BLOCK_N) * BLOCK_K : BLOCK_N * BLOCK_K;
+static constexpr int SmemLayoutStageStrideA = kKernelStrategy == KernelStrategy::OverlapMainloop || kKernelStrategy == KernelStrategy::OverlapPrologue ? (BLOCK_M + BLOCK_N) * BLOCK_K : BLOCK_M * BLOCK_K;
+static constexpr int SmemLayoutStageStrideB = kKernelStrategy == KernelStrategy::OverlapMainloop || kKernelStrategy == KernelStrategy::OverlapPrologue ? (BLOCK_M + BLOCK_N) * BLOCK_K : BLOCK_N * BLOCK_K;
 using DefaultOperandA = cutlass::gemm::config::DefaultGemm_AIU_Operand<ArchTag, ElementA, TransA, Int<BLOCK_M>, Int<BLOCK_K>, false, SmemLayoutStageStrideA>;
 using DefaultOperandB = cutlass::gemm::config::DefaultGemm_AIU_Operand<ArchTag, ElementB, TransB, Int<BLOCK_N>, Int<BLOCK_K>, true, SmemLayoutStageStrideB>;
 // using t1 = DefaultOperandB::xhzhao;
@@ -339,7 +339,7 @@ __global__ void {12}(
             cute::get<1>(problem_shape), cute::get<2>(problem_shape),
             args.launch_info.block_m, args.launch_info.block_n, args.launch_info.block_k, args.launch_info.num_groups,
             args.launch_info.warp_m, args.launch_info.warp_n, args.launch_info.num_stages, args.launch_info.gemm_type,
-            args.launch_info.kernel_type, args.launch_info.enable_sbo_overlap, args.launch_info.kernel_name,
+            args.launch_info.kernel_strategy, args.launch_info.enable_sbo_overlap, args.launch_info.kernel_name,
             hw.tsm_per_cu, hw.max_threads_per_cta, hw.max_warps_per_cu, hw.total_vreg_per_cu,
             with_tsm_epilogue, host_params_size);
     }
@@ -397,7 +397,7 @@ public:
         int warp_k;           // WARP_K tile size for K-dim split (= block_k / WarpOnK). Used in WarpShape as Int<WARP_K>.
         bool dense_s2_opt;
         int num_stages;
-        std::string gemm_type, kernel_type, kernel_name;
+        std::string gemm_type, kernel_strategy, kernel_name;
         bool enable_sbo_overlap;
         bool overlap_prologue; // next-tile prologue overlap, enabled by host when wave > 3 (acblas parity)
     };
@@ -629,7 +629,7 @@ public:
         int warp_k;           // WARP_K tile size for K-dim split (= block_k / WarpOnK). Used in WarpShape as Int<WARP_K>.
         bool dense_s2_opt;
         int num_stages;
-        std::string gemm_type, kernel_type, kernel_name;
+        std::string gemm_type, kernel_strategy, kernel_name;
         bool enable_sbo_overlap;
         bool overlap_prologue;
     };
@@ -817,7 +817,7 @@ static bool gemv_dense_bf16(const torch::Tensor& lhs, const torch::Tensor& rhs,
     const auto& runtime = compiler->build(kernel_name, code);
     const auto& kernel = runtime->kernel;
 
-    static constexpr GemmType kGemmType = GemmType::DenseGemm;
+    static constexpr GemmType kGemmType = GemmType::Normal;
     DgProfParam dg_prof_params;
     if (ProfilingInterface::Instance().get_op_info()) {
         dg_prof_params.set_params(kGemmType, false, std::string("bf16"), 1, m, n, k, 0, nullptr,
@@ -847,7 +847,7 @@ using ConfigTuple = std::tuple<int, int, int, int, int, int, int, std::tuple<int
 static void bf16_gemm(const torch::Tensor& lhs, const torch::Tensor& rhs, const torch::Tensor& out, const int& m,
                       const int& n, const int& k, std::optional<ConfigTuple> configs = std::nullopt) {
     int num_sms = get_num_sms();
-    static constexpr GemmType kGemmType = GemmType::DenseGemm;
+    static constexpr GemmType kGemmType = GemmType::Normal;
 
     using Config = std::tuple<int, int, int, int, int, int, int, int, std::tuple<int, int, int>>;
 
@@ -974,7 +974,7 @@ static void bf16_gemm(const torch::Tensor& lhs, const torch::Tensor& rhs, const 
             overlap_on ? "bf16_deep_gemm_cute_free_ovlp" : "bf16_deep_gemm_cute_free";
         auto args = DenseBF16GemmCuteFreeRuntime::Args{
             .launch_info = {block_m, block_n, block_k, warp_m, warp_n, warp_k, /*dense_s2_opt=*/true, num_stages,
-                            "DenseGemm", "Default", cute_free_kernel_name, enable_sbo_overlap, overlap_on},
+                            "Normal", "Default", cute_free_kernel_name, enable_sbo_overlap, overlap_on},
             .launch_args = {grid, block_cute_free, smem_cute_free},
             .kernel_params = params,
         };
@@ -1068,7 +1068,7 @@ static void bf16_gemm(const torch::Tensor& lhs, const torch::Tensor& rhs, const 
             // Single compilation: overlap decision is baked into the generated code.
             auto args = DenseBF16GemmCutlass3Runtime::Args{
                 .launch_info = {block_m, block_n, block_k, warp_m, warp_n, warp_k, /*dense_s2_opt=*/true, num_stages,
-                                "DenseGemm", "Default", "bf16_dense_gemm", false, /*overlap_prologue=*/overlap_on},
+                                "Normal", "Default", "bf16_dense_gemm", false, /*overlap_prologue=*/overlap_on},
                 .launch_args = {grid, block_cutlass3, SMSIZE},
                 .kernel_params = params,
             };
@@ -1128,7 +1128,7 @@ static void bf16_gemm(const torch::Tensor& lhs, const torch::Tensor& rhs, const 
             BF16GemmCutlass3Runtime::to_underlying_arguments_rtc(gemm_args, nullptr);
 
         auto args = BF16GemmCutlass3Runtime::Args{.launch_info = {block_m, block_n, block_k, warp_m, warp_n, kNumGroups,
-                                                                  num_stages, "DenseGemm", "Default", "bf16_deep_gemm",
+                                                                  num_stages, "Normal", "Default", "bf16_deep_gemm",
                                                                   enable_sbo_overlap},
                                                   .launch_args = {grid, block, SMSIZE},
                                                   .kernel_params = params};

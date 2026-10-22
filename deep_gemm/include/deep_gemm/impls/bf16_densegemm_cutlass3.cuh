@@ -906,11 +906,11 @@ template <typename ElementAB, typename ElementAcc,
           uint32_t WARP_M, uint32_t WARP_N, uint32_t WARP_K,
           uint32_t kNumStages,
           bool kDenseS2Opt = false,
-          KernelType kKernelType = KernelType::Default,
+          KernelStrategy kKernelStrategy = KernelStrategy::Default,
           bool IsAlignedN_ = true>
 class BF16DenseGemm {
 public:
-    static_assert(kKernelType == KernelType::Default, "BF16 DenseGemm only supports the Default kernel type");
+    static_assert(kKernelStrategy == KernelStrategy::Default, "BF16 DenseGemm only supports the Default kernel strategy");
 
     BF16DenseGemm() = default;
 
@@ -1030,7 +1030,7 @@ public:
         DgProfParam dg_prof_params;
         if (ProfilingInterface::Instance().get_op_info()) {
             dg_prof_params.set_params(
-                GemmType::DenseGemm, false, std::string("bf16"), 1, shape_m, shape_n, shape_k, shape_m,
+                GemmType::Normal, false, std::string("bf16"), 1, shape_m, shape_n, shape_k, shape_m,
                 nullptr, stream
             );
         }
